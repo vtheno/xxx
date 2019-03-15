@@ -3,26 +3,66 @@ import types
 function = types.FunctionType
 def debug(*obj: object):
     print( *['[DEBUG]:'] + list(obj))
+
 class NotMatch(Exception): pass
+
+def get_name(obj):
+    return getattr(obj, '__name__', obj)
+
+def safe_pop(maps, key, val='unknow'):
+    if maps.get(key, None):
+        val = get_name(maps.pop(key))
+    if key != 'return':
+        return f'({key}: {val})'
+    return val
+
+def has_args(co_flags):
+    # bin: 100, num: 4
+    # binary or is add
+    # 100 & 0...100 => 0...100 
+    co_flags = bin(co_flags)
+    return co_flags[-3] == '1'
+
+def has_kws(co_flags):
+    # bin: 1000, num: 8
+    co_flags = bin(co_flags)
+    return co_flags[-4] == '1'
+
 def format_func(func: function):
+    name = func.__name__
+    code = func.__code__
+    flags = code.co_flags
+    unknow = 'unknow'
+    if has_args(flags) or has_kws(flags):
+        return unknow
     maps = func.__annotations__
-    rettype = maps.get('return', 'unit')
-    rettype = getattr(rettype, '__name__', str(rettype))
-    argstype = ' * '.join(getattr(v, '__name__', str(v)) for k, v in maps.items() if k != 'return')
-    return f'{argstype} -> {rettype}'
-class Context(object):
+    rettype = safe_pop(maps, 'return', unknow)
+    varnames = code.co_varnames[0:code.co_argcount]
+    argstype = ' * '.join(safe_pop(maps, k, unknow) for k in varnames)
+    if not maps:
+        return f'{name}: {argstype} -> {rettype}'
+    return f'{name}: {unknow}'
+
+class context(object):
     def __init__(self, pat: function, route: dict):
         self.pat = pat
         self.route = route
     def __repr__(self):
-        return f'{self.pat.__name__}: ' + ' | '.join(format_func(v) for v in self.route.values() )
-class Pattern(object):
+        base = format_func(self.pat)
+        if self.route:
+            buff = ''
+            buff += base + ' | '
+            buff += ' | '.join(format_func(v) for v in self.route.values())
+            return buff
+        return base
+
+class pattern(object):
     def __init__(self, pat: function):
-        self.__ctx__ = Context(pat, {})
+        self.__ctx__ = context(pat, {})
     def __repr__(self):
         return repr(self.__ctx__)
     def match(self, target: object):
-        return Of(self.__ctx__, target, self)
+        return of(self.__ctx__, target, self)
     def __call__(self, *args, **kws):
         source = self.__ctx__.pat(*args, **kws)
         case = self.__ctx__.route.get(source, None)
@@ -30,37 +70,22 @@ class Pattern(object):
             return case(*args, **kws)
         else:
             raise NotMatch(repr(self))
-class Of(object):
-    def __init__(self, ctx: Context, target: object, parent: Pattern):
+
+class of(object):
+    def __init__(self, ctx: context, target: object, parent: pattern):
         self.__ctx__ = ctx
         self.__target__ = target
         self.__parent__ = parent
     def __repr__(self):
         return repr(self.__ctx__)
     def __call__(self, case: function):
-        self.__ctx__.route[self.__target__] = case
-        return self.__parent__
+        name = case.__name__
+        if name == '_':
+            self.__ctx__.route[self.__target__] = case
+        else:
+            raise SyntaxError(f'case name require is `_` but get {name!r}')
 
 __all__ = [
     "debug", "format_func",
-    "Pattern",
+    "pattern", "NotMatch"
 ]
-"""
-@Pattern
-def toString(node: object): 
-    # type : object -> class
-    # type : object -> type
-    return type(node)
-debug('[def pattern]', toString)
-
-@toString.match(int)
-def toString(node: int) -> str:
-    return f'{node}'
-
-@toString.match(tuple)
-def toString(node: tuple) -> str:
-    return f'{node}'
-
-debug('[toString]', toString)
-debug("[match]", toString.match(str) )
-"""
