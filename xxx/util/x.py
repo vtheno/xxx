@@ -1,6 +1,5 @@
 #coding=utf-8
 import types
-import sys
 import threading
 
 function = types.FunctionType
@@ -22,7 +21,7 @@ def safe_pop(maps, key, val='unknow'):
 def has_args(co_flags):
     # bin: 100, num: 4
     # binary or is add
-    # 100 & 0...100 => 0...100 
+    # 100 & 0...100 => 0...100
     co_flags = bin(co_flags)
     return co_flags[-3] == '1'
 
@@ -62,7 +61,6 @@ class context:
 class pattern:
     def __init__(self, pat: function):
         self.__ctx__ = context(pat, {})
-        # sys.setrecursionlimit(2 ** 31 - 1)
     def __repr__(self):
         return repr(self.__ctx__)
     def match(self, target: object):
@@ -124,5 +122,5 @@ class async(object):
 __all__ = [
     "debug", "format_func",
     "pattern", "NotMatch",
-    "async", "async_env", "NotSyncTask"
+    "async", "async_env", "NotAsyncTask"
 ]
