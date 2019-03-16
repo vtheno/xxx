@@ -107,7 +107,6 @@ venv.bak/
 *~
 *.tex
 *.pdf
-*.org
 *.cmd
 app/
 ext/*.c
