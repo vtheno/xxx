@@ -1,5 +1,8 @@
 #coding=utf-8
 import types
+import sys
+import threading
+
 function = types.FunctionType
 def debug(*obj: object):
     print( *['[DEBUG]:'] + list(obj))
@@ -43,7 +46,7 @@ def format_func(func: function):
         return f'{name}: {argstype} -> {rettype}'
     return f'{name}: {unknow}'
 
-class context(object):
+class context:
     def __init__(self, pat: function, route: dict):
         self.pat = pat
         self.route = route
@@ -56,36 +59,70 @@ class context(object):
             return buff
         return base
 
-class pattern(object):
+class pattern:
     def __init__(self, pat: function):
         self.__ctx__ = context(pat, {})
+        # sys.setrecursionlimit(2 ** 31 - 1)
     def __repr__(self):
         return repr(self.__ctx__)
     def match(self, target: object):
-        return of(self.__ctx__, target, self)
+        def __case__(case: function):
+            name = case.__name__
+            if name == '_':
+                self.__ctx__.route[target] = case
+            else:
+                raise SyntaxError(f'case name require is `_` but get `{name}`')
+        return __case__
     def __call__(self, *args, **kws):
         source = self.__ctx__.pat(*args, **kws)
         case = self.__ctx__.route.get(source, None)
         if case:
-            return case(*args, **kws)
+            try:
+                return case(*args, **kws)
+            except RecursionError:
+                return async(case)(*args, **kws).wait()
         else:
             raise NotMatch(repr(self))
 
-class of(object):
-    def __init__(self, ctx: context, target: object, parent: pattern):
-        self.__ctx__ = ctx
-        self.__target__ = target
-        self.__parent__ = parent
-    def __repr__(self):
-        return repr(self.__ctx__)
-    def __call__(self, case: function):
-        name = case.__name__
-        if name == '_':
-            self.__ctx__.route[self.__target__] = case
+class NotAsyncTask(Exception): pass
+
+class async_env(object):
+    def __init__(self):
+        self.ret = None
+        self.thread = None
+    def add(self, thread: threading.Thread):
+        self.thread = thread
+        self.thread.start()
+    def push(self, value):
+        self.ret = value
+    def wait(self):
+        """
+        while self.ret == None:
+            continue
+        return self.ret
+        """
+        if self.thread:
+            self.thread.join() # wait thread finished
+            return self.ret
         else:
-            raise SyntaxError(f'case name require is `_` but get {name!r}')
+            raise NotAsyncTask
+
+class async(object):
+    def __init__(self, task):
+        self.task = task
+    def __call__(self, *args, **kws):
+        ctx = async_env()
+        def __task__(*args, **kws):
+            ctx.push( self.task(*args, **kws) )
+        t = threading.Thread(target=__task__,
+                             args=args,
+                             kwargs=kws,
+                             daemon=False)
+        ctx.add(t)
+        return ctx
 
 __all__ = [
     "debug", "format_func",
-    "pattern", "NotMatch"
+    "pattern", "NotMatch",
+    "async", "async_env", "NotSyncTask"
 ]
